@@ -88,7 +88,7 @@ class NetworkMonitor:
 
 class ResolutionAdaptationEngine:
     def __init__(self):
-        self.current_resolution = '1080p'
+        self.current_resolution = '240p'
         self.resolution_history = deque(maxlen=50)
         
         # Thresholds for resolution switching
@@ -166,7 +166,7 @@ class ResolutionAdaptationEngine:
         return self.current_resolution
 
 class VideoStreamingClient:
-    def __init__(self, server_host='10.42.0.13', video_port=8890, control_port=8889):
+    def __init__(self, server_host='10.177.60.65', video_port=8890, control_port=8889):
         self.server_host = server_host
         self.video_port = video_port
         self.control_port = control_port
@@ -181,7 +181,7 @@ class VideoStreamingClient:
         
         # State
         self.is_running = False
-        self.current_resolution = '1080p'
+        self.current_resolution = '240p'
         
         print(f"Client initialized for server {server_host}:{video_port}")
     
@@ -196,6 +196,7 @@ class VideoStreamingClient:
             self.control_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.control_socket.connect((self.server_host, self.control_port))
             print(f"Connected to control server at {self.server_host}:{self.control_port}")
+            print(f"[TCP] Client successfully connected to TCP control port {self.control_port}")
             
             return True
             

@@ -117,6 +117,10 @@ class VideoStreamingServer:
                     if message['type'] == 'resolution_request':
                         requested_resolution = message['resolution']
                         if requested_resolution in self.resolutions:
+                            # Log resolution change before updating
+                            if requested_resolution != self.current_resolution:
+                                print(f"[OUTPUT] Stream resolution changed: {self.current_resolution} -> {requested_resolution}")
+                            
                             self.current_resolution = requested_resolution
                             print(f"[RESOLUTION] Client requested resolution change to: {requested_resolution}")
                             
@@ -188,6 +192,7 @@ class VideoStreamingServer:
         
         print(f"Starting video stream at {fps:.2f} FPS...")
         print(f"Waiting for client to connect on {self.host}:{self.control_port}")
+        print(f"[OUTPUT] Initial stream resolution: {self.current_resolution}")
         if self.video_file_path:
             print(f"Streaming video file: {os.path.basename(self.video_file_path)}")
         
