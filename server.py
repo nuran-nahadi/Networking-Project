@@ -18,13 +18,15 @@ class VideoStreamingServer:
         
         # Video settings for different resolutions
         self.resolutions = {
-            'low': (320, 240, 300000),      # width, height, bitrate
-            'medium': (640, 480, 800000),
-            'high': (1920, 1080, 5000000),  # 1080p
-            'ultra': (3840, 2160, 15000000) # 4K (close to original)
+            '240p': (426, 240, 300000),      # width, height, bitrate
+            '360p': (640, 360, 500000),
+            '480p': (854, 480, 800000),
+            '720p': (1280, 720, 2500000),
+            '1080p': (1920, 1080, 5000000),
+            '4K': (3840, 2160, 15000000)
         }
         
-        self.current_resolution = 'low' 
+        self.current_resolution = '480p' 
         self.clients = {}  # Store client connections and their preferred resolution
         self.video_source = None
         self.is_streaming = False
@@ -193,15 +195,22 @@ class VideoStreamingServer:
                 if frame is None:
                     continue
                 
-                # Determine which resolutions to send (default to medium if no clients)
-                active_resolutions = set(self.clients.values()) if self.clients else {'medium'}
+                # Determine which resolutions to send (default to 480p if no clients)
+                active_resolutions = set(self.clients.values()) if self.clients else {'480p'}
                 
                 for resolution in active_resolutions:
                     # Resize and encode frame
                     resized_frame = self.resize_frame(frame, resolution)
                     
                     # Adjust quality based on resolution
-                    quality_map = {'low': 60, 'medium': 75, 'high': 85, 'ultra': 90}
+                    quality_map = {
+                        '240p': 60, 
+                        '360p': 65, 
+                        '480p': 70, 
+                        '720p': 75, 
+                        '1080p': 85, 
+                        '4K': 90
+                    }
                     encoded_frame = self.encode_frame(resized_frame, quality_map[resolution])
                     
                     # Create packet

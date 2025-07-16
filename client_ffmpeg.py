@@ -53,7 +53,7 @@ class NetworkMonitor:
             if sequence_num > expected_seq:
                 lost = sequence_num - expected_seq
                 self.lost_packets += lost
-                print(f"📦 Packet loss detected: {lost} packets lost")
+                print(f"[LOSS] Packet loss detected: {lost} packets lost")
         
         self.last_sequence = sequence_num
         self.update_metrics()
@@ -155,8 +155,8 @@ class QualityAdaptationEngine:
                 new_quality = 'ultra'
         
         if new_quality != self.current_quality:
-            print(f"🎯 Quality adaptation: {self.current_quality} → {new_quality}")
-            print(f"📊 Metrics: Latency={latency:.1f}ms, Jitter={jitter:.1f}ms, "
+            print(f"[QUALITY] Quality adaptation: {self.current_quality} -> {new_quality}")
+            print(f"[METRICS] Metrics: Latency={latency:.1f}ms, Jitter={jitter:.1f}ms, "
                   f"Loss={packet_loss:.1f}%, Throughput={throughput:.0f}B/s")
             
             self.current_quality = new_quality
@@ -191,7 +191,7 @@ class FFmpegVideoClient:
         # Buffer for received data
         self.video_buffer = deque(maxlen=1000)  # Buffer for smooth playback
         
-        print(f"🎬 FFmpeg Client initialized for server {server_host}:{video_port}")
+        print(f"[INIT] FFmpeg Client initialized for server {server_host}:{video_port}")
     
     def check_ffmpeg(self):
         """Check if FFmpeg/FFplay is available"""
@@ -200,17 +200,17 @@ class FFmpegVideoClient:
             result = subprocess.run(['ffplay', '-version'], 
                                   capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
-                print("✅ FFplay found and working")
+                print("[OK] FFplay found and working")
                 return True
             else:
-                print("❌ FFplay not working properly")
+                print("[ERROR] FFplay not working properly")
                 return False
         except FileNotFoundError:
-            print("❌ FFplay not found in PATH")
+            print("[ERROR] FFplay not found in PATH")
             print("Please install FFmpeg from https://ffmpeg.org/download.html")
             return False
         except subprocess.TimeoutExpired:
-            print("❌ FFplay check timed out")
+            print("[ERROR] FFplay check timed out")
             return False
     
     def connect_to_server(self):
@@ -219,12 +219,12 @@ class FFmpegVideoClient:
             # Bind video socket to any available port (let OS choose)
             self.video_socket.bind(('', 0))  # 0 means any available port
             actual_port = self.video_socket.getsockname()[1]
-            print(f"📺 Video socket bound to port {actual_port}")
+            print(f"[VIDEO] Video socket bound to port {actual_port}")
             
             # Connect control socket
             self.control_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.control_socket.connect((self.server_host, self.control_port))
-            print(f"🔗 Connected to control server at {self.server_host}:{self.control_port}")
+            print(f"[CONNECT] Connected to control server at {self.server_host}:{self.control_port}")
             
             # Send client registration with video port
             registration = {
@@ -238,15 +238,15 @@ class FFmpegVideoClient:
             response = self.control_socket.recv(1024).decode()
             ack = json.loads(response)
             if ack['type'] == 'register_ack' and ack['status'] == 'success':
-                print(f"✅ Successfully registered with server for video on port {actual_port}")
+                print(f"[OK] Successfully registered with server for video on port {actual_port}")
             else:
-                print(f"❌ Registration failed: {ack}")
+                print(f"[ERROR] Registration failed: {ack}")
                 return False
             
             return True
             
         except Exception as e:
-            print(f"❌ Error connecting to server: {e}")
+            print(f"[ERROR] Error connecting to server: {e}")
             return False
     
     def send_quality_request(self, quality):
@@ -264,11 +264,11 @@ class FFmpegVideoClient:
                 response = self.control_socket.recv(1024).decode()
                 ack = json.loads(response)
                 if ack['type'] == 'quality_ack':
-                    print(f"✅ Quality change acknowledged: {ack['quality']}")
+                    print(f"[OK] Quality change acknowledged: {ack['quality']}")
                     return True
                     
             except Exception as e:
-                print(f"❌ Error sending quality request: {e}")
+                print(f"[ERROR] Error sending quality request: {e}")
         
         return False
     
@@ -299,7 +299,7 @@ class FFmpegVideoClient:
             return sequence_num, timestamp, quality, video_data
             
         except Exception as e:
-            print(f"❌ Error parsing packet: {e}")
+            print(f"[ERROR] Error parsing packet: {e}")
             return None, None, None, None
     
     def start_ffplay(self):
@@ -327,7 +327,7 @@ class FFmpegVideoClient:
                 '-loglevel', 'quiet'     # Quiet output
             ]
             
-            print("🎮 Starting FFplay for video playback...")
+            print("[PLAYER] Starting FFplay for video playback...")
             self.ffplay_process = subprocess.Popen(
                 cmd,
                 stdin=subprocess.PIPE,
@@ -336,11 +336,11 @@ class FFmpegVideoClient:
             )
             
             self.ffplay_pipe = self.ffplay_process.stdin
-            print(f"✅ FFplay started (PID: {self.ffplay_process.pid})")
+            print(f"[OK] FFplay started (PID: {self.ffplay_process.pid})")
             return True
             
         except Exception as e:
-            print(f"❌ Error starting FFplay: {e}")
+            print(f"[ERROR] Error starting FFplay: {e}")
             return False
     
     def start_streaming(self):
@@ -368,8 +368,8 @@ class FFmpegVideoClient:
         
         # Main loop for quality adaptation
         try:
-            print("\n🎥 Starting FFmpeg video streaming client...")
-            print("📊 Monitoring network metrics and adapting quality...")
+            print("\n*** Starting FFmpeg video streaming client ***")
+            print("[MONITOR] Monitoring network metrics and adapting quality...")
             print("Press Ctrl+C to stop\n")
             
             while self.is_running:
@@ -388,7 +388,7 @@ class FFmpegVideoClient:
                     }
                     resolution = quality_map.get(self.received_quality, 'unknown')
                     
-                    print(f"📺 Display: 1600x900 | Stream: {self.received_quality}({resolution}) | "
+                    print(f"[DISPLAY] Display: 1600x900 | Stream: {self.received_quality}({resolution}) | "
                           f"Loss: {metrics['packet_loss']:.1f}% | "
                           f"Latency: {metrics['latency']:.1f}ms | "
                           f"Buffer: {len(self.video_buffer)}")
@@ -401,13 +401,13 @@ class FFmpegVideoClient:
                         self.current_quality = new_quality
                 
         except KeyboardInterrupt:
-            print("\n🛑 Stopping client...")
+            print("\n[STOP] Stopping client...")
         finally:
             self.cleanup()
     
     def receive_video(self):
         """Receive video packets from server"""
-        print("📡 Starting video reception...")
+        print("[RECEPTION] Starting video reception...")
         
         while self.is_running:
             try:
@@ -423,7 +423,7 @@ class FFmpegVideoClient:
                     # Track received quality
                     if quality != self.received_quality:
                         if self.received_quality is not None:
-                            print(f"📺 Stream quality changed: {self.received_quality} → {quality}")
+                            print(f"[QUALITY] Stream quality changed: {self.received_quality} -> {quality}")
                         self.received_quality = quality
                     
                     # Add to buffer
@@ -431,11 +431,11 @@ class FFmpegVideoClient:
                 
             except Exception as e:
                 if self.is_running:
-                    print(f"❌ Error receiving video: {e}")
+                    print(f"[ERROR] Error receiving video: {e}")
     
     def playback_video(self):
         """Send buffered video data to FFplay"""
-        print("🎮 Starting video playback...")
+        print("[PLAYBACK] Starting video playback...")
         
         while self.is_running:
             try:
@@ -451,17 +451,17 @@ class FFmpegVideoClient:
                     time.sleep(0.001)  # 1ms
                     
             except BrokenPipeError:
-                print("🎮 FFplay window closed")
+                print("[PLAYBACK] FFplay window closed")
                 self.is_running = False
                 break
             except Exception as e:
                 if self.is_running:
-                    print(f"❌ Playback error: {e}")
+                    print(f"[ERROR] Playback error: {e}")
                 break
     
     def cleanup(self):
         """Clean up resources"""
-        print("🧹 Cleaning up client...")
+        print("[CLEANUP] Cleaning up client...")
         self.is_running = False
         
         # Close FFplay
@@ -485,11 +485,11 @@ class FFmpegVideoClient:
         if self.control_socket:
             self.control_socket.close()
         
-        print("✅ Client cleanup completed")
+        print("[CLEANUP] Client cleanup completed")
 
 def signal_handler(signum, frame):
     """Handle Ctrl+C gracefully"""
-    print("\n🛑 Received interrupt signal...")
+    print("\n[INTERRUPT] Received interrupt signal...")
     sys.exit(0)
 
 def main():
@@ -500,7 +500,7 @@ def main():
     try:
         client.start_streaming()
     except KeyboardInterrupt:
-        print("\n🛑 Shutting down client...")
+        print("\n[SHUTDOWN] Shutting down client...")
     finally:
         client.cleanup()
 

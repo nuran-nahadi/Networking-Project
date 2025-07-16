@@ -88,7 +88,7 @@ class NetworkMonitor:
 
 class ResolutionAdaptationEngine:
     def __init__(self):
-        self.current_resolution = 'ultra'
+        self.current_resolution = '1080p'
         self.resolution_history = deque(maxlen=50)
         
         # Thresholds for resolution switching
@@ -126,12 +126,16 @@ class ResolutionAdaptationEngine:
             throughput < self.thresholds['throughput_low']):
             
             # Network conditions are poor, decrease resolution
-            if self.current_resolution == 'ultra':
-                new_resolution = 'high'
-            elif self.current_resolution == 'high':
-                new_resolution = 'medium'
-            elif self.current_resolution == 'medium':
-                new_resolution = 'low'
+            if self.current_resolution == '4K':
+                new_resolution = '1080p'
+            elif self.current_resolution == '1080p':
+                new_resolution = '720p'
+            elif self.current_resolution == '720p':
+                new_resolution = '480p'
+            elif self.current_resolution == '480p':
+                new_resolution = '360p'
+            elif self.current_resolution == '360p':
+                new_resolution = '240p'
             
         elif (latency < self.thresholds['latency_low'] and 
               jitter < self.thresholds['jitter_high'] / 2 and 
@@ -139,12 +143,16 @@ class ResolutionAdaptationEngine:
               throughput > self.thresholds['throughput_high']):
             
             # Network conditions are good, increase resolution
-            if self.current_resolution == 'low':
-                new_resolution = 'medium'
-            elif self.current_resolution == 'medium':
-                new_resolution = 'high'
-            elif self.current_resolution == 'high':
-                new_resolution = 'ultra'
+            if self.current_resolution == '240p':
+                new_resolution = '360p'
+            elif self.current_resolution == '360p':
+                new_resolution = '480p'
+            elif self.current_resolution == '480p':
+                new_resolution = '720p'
+            elif self.current_resolution == '720p':
+                new_resolution = '1080p'
+            elif self.current_resolution == '1080p':
+                new_resolution = '4K'
         
         if new_resolution != self.current_resolution:
             print(f"Resolution adaptation: {self.current_resolution} -> {new_resolution}")
@@ -158,7 +166,7 @@ class ResolutionAdaptationEngine:
         return self.current_resolution
 
 class VideoStreamingClient:
-    def __init__(self, server_host='localhost', video_port=8890, control_port=8889):
+    def __init__(self, server_host='10.42.0.13', video_port=8890, control_port=8889):
         self.server_host = server_host
         self.video_port = video_port
         self.control_port = control_port
@@ -173,7 +181,7 @@ class VideoStreamingClient:
         
         # State
         self.is_running = False
-        self.current_resolution = 'ultra'
+        self.current_resolution = '1080p'
         
         print(f"Client initialized for server {server_host}:{video_port}")
     
@@ -345,10 +353,12 @@ class VideoStreamingClient:
         
         # Get resolution dimensions for the stream quality
         resolution_map = {
-            'low': '320x240',
-            'medium': '640x480', 
-            'high': '1920x1080',
-            'ultra': '3840x2160'
+            '240p': '426x240',
+            '360p': '640x360',
+            '480p': '854x480', 
+            '720p': '1280x720',
+            '1080p': '1920x1080',
+            '4K': '3840x2160'
         }
         stream_resolution = resolution_map.get(stream_quality, 'unknown')
         

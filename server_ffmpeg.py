@@ -74,17 +74,17 @@ class FFmpegVideoServer:
             result = subprocess.run(['ffmpeg', '-version'], 
                                   capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
-                print("✅ FFmpeg found and working")
+                print("[OK] FFmpeg found and working")
                 return True
             else:
-                print("❌ FFmpeg not working properly")
+                print("[ERROR] FFmpeg not working properly")
                 return False
         except FileNotFoundError:
-            print("❌ FFmpeg not found in PATH")
+            print("[ERROR] FFmpeg not found in PATH")
             print("Please install FFmpeg from https://ffmpeg.org/download.html")
             return False
         except subprocess.TimeoutExpired:
-            print("❌ FFmpeg check timed out")
+            print("[ERROR] FFmpeg check timed out")
             return False
             
     def get_video_info(self):
@@ -114,14 +114,14 @@ class FFmpegVideoServer:
                     
                     return True
                 else:
-                    print("❌ No video stream found in file")
+                    print("[ERROR] No video stream found in file")
                     return False
             else:
-                print(f"❌ FFprobe failed: {result.stderr}")
+                print(f"[ERROR] FFprobe failed: {result.stderr}")
                 return False
                 
         except Exception as e:
-            print(f"❌ Error getting video info: {e}")
+            print(f"[ERROR] Error getting video info: {e}")
             return False
     
     def create_ffmpeg_command(self, quality):
@@ -166,7 +166,7 @@ class FFmpegVideoServer:
             return False
             
         if not os.path.exists(self.video_file_path):
-            print(f"❌ Video file not found: {self.video_file_path}")
+            print(f"[ERROR] Video file not found: {self.video_file_path}")
             return False
             
         if not self.get_video_info():
@@ -176,7 +176,7 @@ class FFmpegVideoServer:
             # Start control server
             self.control_socket.bind((self.host, self.control_port))
             self.control_socket.listen(5)
-            print(f"🎛️  Control server listening on {self.host}:{self.control_port}")
+            print(f"[CONTROL] Control server listening on {self.host}:{self.control_port}")
             
             # Start control handler thread
             control_thread = threading.Thread(target=self.handle_control_connections)
@@ -187,18 +187,18 @@ class FFmpegVideoServer:
             self.start_ffmpeg_streaming()
             
         except Exception as e:
-            print(f"❌ Error starting server: {e}")
+            print(f"[ERROR] Error starting server: {e}")
             return False
     
     def start_ffmpeg_streaming(self):
         """Start FFmpeg streaming process"""
-        print(f"🎬 Starting FFmpeg stream with quality: {self.current_quality}")
+        print(f"[START] Starting FFmpeg stream with quality: {self.current_quality}")
         
         while self.is_streaming:
             try:
                 # Create FFmpeg command
                 cmd = self.create_ffmpeg_command(self.current_quality)
-                print(f"🔧 FFmpeg command: {' '.join(cmd[:10])}...")
+                print(f"[DEBUG] FFmpeg command: {' '.join(cmd[:10])}...")
                 
                 # Start FFmpeg process
                 self.ffmpeg_process = subprocess.Popen(
@@ -208,13 +208,13 @@ class FFmpegVideoServer:
                     bufsize=0
                 )
                 
-                print(f"✅ FFmpeg process started (PID: {self.ffmpeg_process.pid})")
+                print(f"[OK] FFmpeg process started (PID: {self.ffmpeg_process.pid})")
                 
                 # Read and broadcast data
                 self.stream_data()
                 
             except Exception as e:
-                print(f"❌ FFmpeg streaming error: {e}")
+                print(f"[ERROR] FFmpeg streaming error: {e}")
                 time.sleep(1)  # Wait before retrying
     
     def stream_data(self):
@@ -229,7 +229,7 @@ class FFmpegVideoServer:
                 data = self.ffmpeg_process.stdout.read(chunk_size)
                 
                 if not data:
-                    print("📺 Video ended, restarting...")
+                    print("[INFO] Video ended, restarting...")
                     break
                 
                 # Create packet with header
@@ -242,7 +242,7 @@ class FFmpegVideoServer:
                 # Status update every 5 seconds
                 current_time = time.time()
                 if current_time - last_status_time >= 5.0:
-                    print(f"📡 Streaming: {packets_sent} packets sent, {len(self.client_addresses)} clients connected")
+                    print(f"[STREAM] Streaming: {packets_sent} packets sent, {len(self.client_addresses)} clients connected")
                     packets_sent = 0
                     last_status_time = current_time
                 
@@ -250,7 +250,7 @@ class FFmpegVideoServer:
                 time.sleep(0.001)  # 1ms delay
                 
         except Exception as e:
-            print(f"❌ Streaming error: {e}")
+            print(f"[ERROR] Streaming error: {e}")
         finally:
             if self.ffmpeg_process:
                 self.ffmpeg_process.terminate()
@@ -281,7 +281,7 @@ class FFmpegVideoServer:
                 self.video_socket.sendto(packet, client_addr)
             except Exception as e:
                 # Remove failed client
-                print(f"❌ Failed to send to {client_addr}, removing: {e}")
+                print(f"[ERROR] Failed to send to {client_addr}, removing: {e}")
                 self.client_addresses.discard(client_addr)
     
     def handle_control_connections(self):
@@ -289,7 +289,7 @@ class FFmpegVideoServer:
         while self.is_streaming:
             try:
                 client_socket, addr = self.control_socket.accept()
-                print(f"🔗 Control connection from {addr}")
+                print(f"[CONNECT] Control connection from {addr}")
                 
                 # Handle client in separate thread
                 client_thread = threading.Thread(
@@ -301,7 +301,7 @@ class FFmpegVideoServer:
                 
             except Exception as e:
                 if self.is_streaming:
-                    print(f"❌ Control connection error: {e}")
+                    print(f"[ERROR] Control connection error: {e}")
     
     def handle_client_control(self, client_socket, addr):
         """Handle control messages from a client"""
@@ -321,7 +321,7 @@ class FFmpegVideoServer:
                         client_video_port = message['video_port']
                         client_video_addr = (addr[0], client_video_port)
                         self.client_addresses.add(client_video_addr)
-                        print(f"📡 Registered client for video stream: {client_video_addr}")
+                        print(f"[STREAM] Registered client for video stream: {client_video_addr}")
                         
                         # Send acknowledgment
                         response = {
@@ -338,7 +338,7 @@ class FFmpegVideoServer:
                             old_quality = self.current_quality
                             self.current_quality = requested_quality
                             
-                            print(f"🎯 Quality change: {old_quality} → {requested_quality}")
+                            print(f"[QUALITY] Quality change: {old_quality} -> {requested_quality}")
                             
                             # Send acknowledgment
                             response = {
@@ -352,15 +352,15 @@ class FFmpegVideoServer:
                             self.restart_ffmpeg()
                         
                 except json.JSONDecodeError:
-                    print(f"❌ Invalid JSON from {addr}")
+                    print(f"[ERROR] Invalid JSON from {addr}")
                     
         except Exception as e:
-            print(f"❌ Client control error {addr}: {e}")
+            print(f"[ERROR] Client control error {addr}: {e}")
         finally:
             # Unregister client when disconnecting
             if client_video_addr:
                 self.client_addresses.discard(client_video_addr)
-                print(f"📡 Unregistered client: {client_video_addr}")
+                print(f"[STREAM] Unregistered client: {client_video_addr}")
             
             client_socket.close()
             if addr in self.clients:
@@ -369,14 +369,14 @@ class FFmpegVideoServer:
     def restart_ffmpeg(self):
         """Restart FFmpeg with new quality settings"""
         if self.ffmpeg_process:
-            print("🔄 Restarting FFmpeg with new quality...")
+            print("[RESTART] Restarting FFmpeg with new quality...")
             self.ffmpeg_process.terminate()
             self.ffmpeg_process.wait()
             # The main streaming loop will restart FFmpeg automatically
     
     def cleanup(self):
         """Clean up resources"""
-        print("🧹 Cleaning up server...")
+        print("[CLEANUP] Cleaning up server...")
         self.is_streaming = False
         
         if self.ffmpeg_process:
@@ -388,16 +388,16 @@ class FFmpegVideoServer:
         
         self.video_socket.close()
         self.control_socket.close()
-        print("✅ Server cleanup completed")
+        print("[CLEANUP] Server cleanup completed")
 
 def signal_handler(signum, frame):
     """Handle Ctrl+C gracefully"""
-    print("\n🛑 Received interrupt signal...")
+    print("\n[INTERRUPT] Received interrupt signal...")
     sys.exit(0)
 
 def find_video_in_current_directory():
     """Find video files in the current directory only"""
-    print("🔍 Searching for video files in current directory...")
+    print("[SEARCH] Searching for video files in current directory...")
     
     video_extensions = ['.mp4', '.avi', '.mkv', '.mov', '.wmv', '.flv', '.webm', '.m4v']
     current_dir = os.getcwd()
@@ -410,22 +410,22 @@ def find_video_in_current_directory():
                 if os.path.isfile(full_path):
                     size_mb = os.path.getsize(full_path) / (1024 * 1024)
                     found_videos.append((full_path, size_mb, file))
-                    print(f"   📹 {file} ({size_mb:.1f} MB)")
+                    print(f"   [VIDEO] {file} ({size_mb:.1f} MB)")
     except PermissionError:
-        print(f"❌ Permission denied accessing current directory")
+        print(f"[ERROR] Permission denied accessing current directory")
         return None
     
     if found_videos:
-        print(f"\n✅ Found {len(found_videos)} video file(s) in current directory")
+        print(f"\n[OK] Found {len(found_videos)} video file(s) in current directory")
         
         if len(found_videos) == 1:
             # Auto-select if only one video found
             selected_video = found_videos[0][0]
-            print(f"🎯 Auto-selected: {found_videos[0][2]}")
+            print(f"[AUTO] Auto-selected: {found_videos[0][2]}")
             return selected_video
         else:
             # Let user choose from multiple videos
-            print("\n📋 Select a video file:")
+            print("\n[SELECT] Select a video file:")
             for i, (path, size_mb, filename) in enumerate(found_videos, 1):
                 print(f"   {i}. {filename} ({size_mb:.1f} MB)")
             
@@ -438,15 +438,15 @@ def find_video_in_current_directory():
                     choice_idx = int(choice) - 1
                     if 0 <= choice_idx < len(found_videos):
                         selected_video = found_videos[choice_idx][0]
-                        print(f"🎯 Selected: {found_videos[choice_idx][2]}")
+                        print(f"[SELECTED] Selected: {found_videos[choice_idx][2]}")
                         return selected_video
                     else:
-                        print(f"❌ Please enter a number between 1 and {len(found_videos)}")
+                        print(f"[ERROR] Please enter a number between 1 and {len(found_videos)}")
                 except ValueError:
-                    print("❌ Please enter a valid number")
+                    print("[ERROR] Please enter a valid number")
     else:
-        print("❌ No video files found in current directory")
-        print("💡 Please place a video file (.mp4, .avi, .mkv, etc.) in the current directory")
+        print("[ERROR] No video files found in current directory")
+        print("[INFO] Please place a video file (.mp4, .avi, .mkv, etc.) in the current directory")
         return None
 
 def main():
@@ -460,24 +460,24 @@ def main():
     if len(sys.argv) > 1:
         video_file = sys.argv[1]
         if not os.path.exists(video_file):
-            print(f"❌ Video file '{video_file}' not found!")
+            print(f"[ERROR] Video file '{video_file}' not found!")
             print("Usage: python server_ffmpeg.py [path_to_video.mp4]")
             return
     else:
-        print("🎬 FFmpeg Video Streaming Server")
+        print("*** FFmpeg Video Streaming Server ***")
         print("=" * 40)
         
         # Auto-detect video files in current directory
         video_file = find_video_in_current_directory()
         if not video_file:
-            print("\n❌ No video file selected or found!")
+            print("\n[ERROR] No video file selected or found!")
             return
     
     server = FFmpegVideoServer(video_file_path=video_file)
     try:
         server.start_server()
     except KeyboardInterrupt:
-        print("\n🛑 Shutting down server...")
+        print("\n[SHUTDOWN] Shutting down server...")
     finally:
         server.cleanup()
 

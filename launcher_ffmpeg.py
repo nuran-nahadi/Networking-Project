@@ -25,15 +25,15 @@ class StreamingLauncher:
         
     def check_dependencies(self):
         """Check if all required files and dependencies are available"""
-        print("🔍 Checking dependencies...")
+        print("[CHECK] Checking dependencies...")
         
         # Check if scripts exist
         if not self.server_script.exists():
-            print(f"❌ Server script not found: {self.server_script}")
+            print(f"[ERROR] Server script not found: {self.server_script}")
             return False
             
         if not self.client_script.exists():
-            print(f"❌ Client script not found: {self.client_script}")
+            print(f"[ERROR] Client script not found: {self.client_script}")
             return False
         
         # Check FFmpeg
@@ -41,7 +41,7 @@ class StreamingLauncher:
             result = subprocess.run(['ffmpeg', '-version'], 
                                   capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
-                print("✅ FFmpeg found")
+                print("[OK] FFmpeg found")
             else:
                 print("❌ FFmpeg not working properly")
                 return False
