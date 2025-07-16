@@ -10,7 +10,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 
 class VideoStreamingServer:
-    def __init__(self, host='localhost', video_port=8888, control_port=8889, video_file_path=None):
+    def __init__(self, host='10.42.0.13', video_port=8888, control_port=8889, video_file_path=None):
         self.host = host
         self.video_port = video_port
         self.control_port = control_port
@@ -236,10 +236,9 @@ class VideoStreamingServer:
     
     def broadcast_packet(self, packet, resolution):
         """Send packet to clients requesting specific resolution"""
-        # For this implementation, we'll broadcast to a fixed client address
-        # In a real implementation, you'd maintain a list of connected clients
+        # Send to the specific client at 10.42.0.176
         try:
-            client_address = (self.host, 8890)  # Client listening port
+            client_address = ('10.42.0.176', 8890)  # Client listening port
             self.video_socket.sendto(packet, client_address)
         except Exception as e:
             pass  # Client might not be ready yet
