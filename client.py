@@ -7,6 +7,7 @@ import struct
 import numpy as np
 from collections import deque
 import statistics
+import sys
 
 class NetworkMonitor:
     def __init__(self, window_size=100):
@@ -25,6 +26,7 @@ class NetworkMonitor:
         self.last_sequence = -1
         self.lost_packets = 0
         self.total_packets = 0
+        self.manual_update = False
         
     def add_packet(self, sequence_num, timestamp, packet_size):
         """Add packet information for analysis"""
@@ -257,6 +259,123 @@ class VideoStreamingClient:
             print(f"Error parsing packet: {e}")
             return None, None, None, None
     
+    def handle_terminal_input(self):
+        """Handle terminal input for manual resolution changes"""
+        available_resolutions = ['240p', '360p', '480p', '720p', '1080p', '4K']
+        
+        print("\n📺 Manual Resolution Control:")
+        print("Available commands:")
+        print("  - Type resolution: 240p, 360p, 480p, 720p, 1080p, 4K")
+        print("  - Type 'help' for this help message")
+        print("  - Type 'status' to see current metrics")
+        print("  - Type 'quit' to stop the client")
+        print("  - Press Enter without typing to continue automatic adaptation")
+        
+        try:
+            import select
+            import sys
+            
+            # For Windows, we'll use a different approach
+            if sys.platform == "win32":
+                self.handle_windows_input(available_resolutions)
+            else:
+                self.handle_unix_input(available_resolutions)
+                
+        except Exception as e:
+            print(f"Terminal input handling error: {e}")
+            
+    def handle_windows_input(self, available_resolutions):
+        """Handle input on Windows"""
+        import msvcrt
+        
+        while self.is_running:
+            if msvcrt.kbhit():
+                try:
+                    # Read the input
+                    line = input("\n📺 Enter command > ").strip().lower()
+                    
+                    if line == 'quit' or line == 'q':
+                        print("🛑 Stopping client...")
+                        self.is_running = False
+                        break
+                    elif line == 'help':
+                        print(f"Available resolutions: {', '.join(available_resolutions)}")
+                        print("Commands: help, status, quit")
+                    elif line == 'status':
+                        metrics = self.network_monitor.get_metrics()
+                        print(f"Current resolution: {self.current_resolution}")
+                        print(f"Latency: {metrics['latency']:.1f}ms")
+                        print(f"Jitter: {metrics['jitter']:.1f}ms") 
+                        print(f"Loss: {metrics['packet_loss']:.1f}%")
+                        print(f"Throughput: {metrics['throughput']/1000:.1f} KB/s")
+                    elif line in [r.lower() for r in available_resolutions]:
+                        # Find proper case resolution
+                        resolution = next(r for r in available_resolutions if r.lower() == line)
+                        print(f"📤 Requesting resolution change to {resolution}...")
+                        if self.send_resolution_request(resolution):
+                            self.manual_update = True
+                            self.current_resolution = resolution
+                            print(f"✅ Resolution changed to {resolution}")
+                        else:
+                            print(f"❌ Failed to change resolution to {resolution}")
+                    elif line == '':
+                        continue  # Empty input, continue
+                    else:
+                        print(f"❌ Unknown command: {line}")
+                        print(f"Available resolutions: {', '.join(available_resolutions)}")
+                        
+                except EOFError:
+                    break
+                except Exception as e:
+                    print(f"Input error: {e}")
+            
+            time.sleep(0.1)  # Small delay to prevent busy waiting
+    
+    def handle_unix_input(self, available_resolutions):
+        """Handle input on Unix/Linux systems"""
+        import select
+        import sys
+        
+        while self.is_running:
+            # Check if input is available
+            if select.select([sys.stdin], [], [], 0.1)[0]:
+                try:
+                    line = input("📺 Enter command > ").strip().lower()
+                    
+                    if line == 'quit' or line == 'q':
+                        print("🛑 Stopping client...")
+                        self.is_running = False
+                        break
+                    elif line == 'help':
+                        print(f"Available resolutions: {', '.join(available_resolutions)}")
+                        print("Commands: help, status, quit")
+                    elif line == 'status':
+                        metrics = self.network_monitor.get_metrics()
+                        print(f"Current resolution: {self.current_resolution}")
+                        print(f"Latency: {metrics['latency']:.1f}ms")
+                        print(f"Jitter: {metrics['jitter']:.1f}ms")
+                        print(f"Loss: {metrics['packet_loss']:.1f}%")
+                        print(f"Throughput: {metrics['throughput']/1000:.1f} KB/s")
+                    elif line in [r.lower() for r in available_resolutions]:
+                        # Find proper case resolution
+                        resolution = next(r for r in available_resolutions if r.lower() == line)
+                        print(f"📤 Requesting resolution change to {resolution}...")
+                        if self.send_resolution_request(resolution):
+                            self.current_resolution = resolution
+                            print(f"✅ Resolution changed to {resolution}")
+                        else:
+                            print(f"❌ Failed to change resolution to {resolution}")
+                    elif line == '':
+                        continue  # Empty input, continue
+                    else:
+                        print(f"❌ Unknown command: {line}")
+                        print(f"Available resolutions: {', '.join(available_resolutions)}")
+                        
+                except EOFError:
+                    break
+                except Exception as e:
+                    print(f"Input error: {e}")
+
     def start_streaming(self):
         """Start the video streaming client"""
         if not self.connect_to_server():
@@ -269,10 +388,16 @@ class VideoStreamingClient:
         video_thread.daemon = True
         video_thread.start()
         
-        # Main loop for resolution adaptation
+        # Start terminal input handler thread
+        input_thread = threading.Thread(target=self.handle_terminal_input)
+        input_thread.daemon = True
+        input_thread.start()
+        
+        # Main loop for automatic resolution adaptation
         try:
             print("\n🎥 Starting video streaming client...")
             print("📊 Monitoring network metrics and adapting resolution...")
+            print("💬 Terminal input available for manual control")
             print("Press Ctrl+C to stop\n")
             
             while self.is_running:
@@ -281,10 +406,11 @@ class VideoStreamingClient:
                 # Get current network metrics
                 metrics = self.network_monitor.get_metrics()
                 
-                # Check if resolution should be adapted
+                # Check if resolution should be adapted (only if no manual override)
                 new_resolution = self.adaptation_engine.should_adapt_resolution(metrics)
                 
-                if new_resolution != self.current_resolution:
+                if new_resolution != self.current_resolution and not self.manual_update:
+                    print(f"🔄 Auto-adapting resolution: {self.current_resolution} -> {new_resolution}")
                     if self.send_resolution_request(new_resolution):
                         self.current_resolution = new_resolution
                 
