@@ -9,8 +9,9 @@ from collections import deque
 import statistics
 
 class NetworkMonitor:
-    def __init__(self, window_size=100):
+    def __init__(self, window_size=100, throughput_window_seconds=1.0):
         self.window_size = window_size
+        self.throughput_window_seconds = throughput_window_seconds  # Customizable time window for throughput
         self.packet_times = deque(maxlen=window_size)
         self.packet_sizes = deque(maxlen=window_size)
         self.sequence_numbers = deque(maxlen=window_size)
@@ -70,12 +71,35 @@ class NetworkMonitor:
             if latency_diffs:
                 self.jitter = statistics.mean(latency_diffs)
         
-        # Calculate throughput (bytes per second)
+        # Calculate throughput (bytes per second) using sliding time window
         if len(self.packet_times) >= 2:
-            time_window = self.packet_times[-1] - self.packet_times[0]
-            if time_window > 0:
-                total_bytes = sum(self.packet_sizes)
-                self.throughput = total_bytes / time_window  # bytes per second
+            current_time = self.packet_times[-1]
+            # Find packets within the specified time window
+            cutoff_time = current_time - self.throughput_window_seconds
+            
+            # Calculate bytes received within the time window
+            bytes_in_window = 0
+            packets_in_window = 0
+            
+            # Iterate through packets from newest to oldest
+            for i in range(len(self.packet_times) - 1, -1, -1):
+                if self.packet_times[i] >= cutoff_time:
+                    bytes_in_window += self.packet_sizes[i]
+                    packets_in_window += 1
+                else:
+                    break  # Packets are older than our window
+            
+            # Calculate throughput as bytes per second
+            if packets_in_window > 1:
+                time_span = self.packet_times[-1] - self.packet_times[-packets_in_window]
+                if time_span > 0:
+                    self.throughput = bytes_in_window / max(time_span, self.throughput_window_seconds)
+                else:
+                    # If all packets arrived at the same time, use the window size
+                    self.throughput = bytes_in_window / self.throughput_window_seconds
+            else:
+                # Not enough data points in the window
+                self.throughput = 0.0
     
     def get_metrics(self):
         """Return current network metrics"""
@@ -93,16 +117,16 @@ class ResolutionAdaptationEngine:
         
         # Thresholds for resolution switching
         self.thresholds = {
-            'latency_high': 200,      # ms
-            'latency_low': 50,        # ms
+            'latency_high': 2000,      # ms
+            'latency_low': 900,        # ms
             'jitter_high': 50,        # ms
-            'packet_loss_high': 2.0,  # %
+            'packet_loss_high': 10,  # %
             'throughput_low': 50000,  # bytes/sec
             'throughput_high': 200000 # bytes/sec
         }
         
         self.last_adaptation_time = 0
-        self.adaptation_cooldown = 3.0  # seconds
+        self.adaptation_cooldown = 7.0  # seconds
     
     def should_adapt_resolution(self, metrics):
         """Determine if resolution should be changed based on network metrics"""
