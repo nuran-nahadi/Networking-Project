@@ -298,7 +298,7 @@ class VideoStreamingClient:
         
         # Create OpenCV window at position 0,0
         cv2.namedWindow('Video Stream', cv2.WINDOW_NORMAL)  # Allow manual resizing
-        cv2.resizeWindow('Video Stream', 1600, 900)  # Set to 900p size
+        cv2.resizeWindow('Video Stream', 1920, 1080)  # Set to 900p size
         cv2.moveWindow('Video Stream', 0, 0)  # Position window at top-left corner
         
         while self.is_running:
@@ -317,10 +317,10 @@ class VideoStreamingClient:
                     
                     if frame is not None:
                         # Always upscale to 1080p for display (regardless of received resolution)
-                        display_frame = cv2.resize(frame, (1600, 900))
-                        
+                        display_frame = cv2.resize(frame, (1920, 1080))
+                        window_size = "1920x1080"
                         # Add overlay with current metrics (pass the actual received resolution)
-                        self.add_metrics_overlay(display_frame, resolution)
+                        self.add_metrics_overlay(display_frame, resolution, window_size)
                         
                         # Display the 1080p frame
                         cv2.imshow('Video Stream', display_frame)
@@ -344,12 +344,12 @@ class VideoStreamingClient:
         
         cv2.destroyWindow('Video Stream')
     
-    def add_metrics_overlay(self, frame, actual_resolution=None):
+    def add_metrics_overlay(self, frame, actual_resolution=None, window_size=None):
         """Add network metrics overlay to video frame"""
         metrics = self.network_monitor.get_metrics()
         
         # Get the actual stream quality from server (what server is sending)
-        stream_quality = actual_resolution if actual_resolution else "unknown"
+        stream_quality = actual_resolution 
         
         # Get resolution dimensions for the stream quality
         resolution_map = {
@@ -366,7 +366,7 @@ class VideoStreamingClient:
         y_offset = 30
         
         # 1. Display Resolution (static - client window size)
-        cv2.putText(frame, f"Display Resolution: 1600x900", 
+        cv2.putText(frame, f"Display Resolution: {window_size}", 
                    (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
         y_offset += 30
         
