@@ -120,21 +120,43 @@ class ChunkResolutionEngine:
         self.current_resolution = '480p'
         self.resolution_history = deque(maxlen=50)
         
-        # Thresholds for chunk-based streaming
-        self.thresholds = {
+        # Base thresholds for chunk-based streaming
+        self.base_thresholds = {
             'latency_high': 200,       # ms
             'latency_low': 100,        # ms
             'jitter_high': 50,         # ms
-            'packet_loss_high': 2.0,   # %
-            'throughput_low': 100000,  # bytes/sec
-            'throughput_high': 500000  # bytes/sec
+            'packet_loss_high': 10,   # %
+        }
+        
+        # Adaptive throughput thresholds based on resolution (in bytes/sec)
+        self.resolution_throughput_thresholds = {
+            '240p': {
+                'throughput_low': 80000,    # 80 KB/s (640 kbps) - minimum for 240p
+                'throughput_high': 150000   # 150 KB/s (1.2 Mbps) - upgrade to 360p
+            },
+            '360p': {
+                'throughput_low': 120000,   # 120 KB/s (960 kbps) - minimum for 360p  
+                'throughput_high': 250000   # 250 KB/s (2 Mbps) - upgrade to 480p
+            },
+            '480p': {
+                'throughput_low': 200000,   # 200 KB/s (1.6 Mbps) - minimum for 480p
+                'throughput_high': 400000   # 400 KB/s (3.2 Mbps) - upgrade to 720p
+            },
+            '720p': {
+                'throughput_low': 350000,   # 350 KB/s (2.8 Mbps) - minimum for 720p
+                'throughput_high': 750000   # 750 KB/s (6 Mbps) - upgrade to 1080p
+            },
+            '1080p': {
+                'throughput_low': 600000,   # 600 KB/s (4.8 Mbps) - minimum for 1080p
+                'throughput_high': 1500000  # 1.5 MB/s (12 Mbps) - maintain 1080p
+            }
         }
         
         self.last_adaptation_time = 0
-        self.adaptation_cooldown = 2.0  # seconds (even shorter for 2-second chunks)
+        self.adaptation_cooldown = 7.0  # seconds
     
     def should_adapt_resolution(self, metrics):
-        """Determine if resolution should be changed for chunk streaming"""
+        """Determine if resolution should be changed for chunk streaming with adaptive thresholds"""
         current_time = time.time()
         
         # Prevent too frequent adaptations
@@ -146,14 +168,30 @@ class ChunkResolutionEngine:
         packet_loss = metrics.get('packet_loss', 0)
         throughput = metrics.get('throughput', 0)
         
+        # Get adaptive thresholds for current resolution
+        current_thresholds = self.resolution_throughput_thresholds.get(
+            self.current_resolution, 
+            self.resolution_throughput_thresholds['480p']  # fallback
+        )
+        
         new_resolution = self.current_resolution
         
-        # Decision logic for resolution adaptation
-        if (latency > self.thresholds['latency_high'] or 
-            jitter > self.thresholds['jitter_high'] or 
-            packet_loss > self.thresholds['packet_loss_high'] or
-            throughput < self.thresholds['throughput_low']):
-            
+        # Decision logic for resolution adaptation with adaptive thresholds
+        poor_network_conditions = (
+            latency > self.base_thresholds['latency_high'] or 
+            jitter > self.base_thresholds['jitter_high'] or 
+            packet_loss > self.base_thresholds['packet_loss_high'] or
+            throughput < current_thresholds['throughput_low']
+        )
+        
+        good_network_conditions = (
+            latency < self.base_thresholds['latency_low'] and 
+            jitter < self.base_thresholds['jitter_high'] / 2 and 
+            packet_loss < self.base_thresholds['packet_loss_high'] / 2 and
+            throughput > current_thresholds['throughput_high']
+        )
+        
+        if poor_network_conditions:
             # Network conditions are poor, decrease resolution
             if self.current_resolution == '1080p':
                 new_resolution = '720p'
@@ -164,11 +202,7 @@ class ChunkResolutionEngine:
             elif self.current_resolution == '360p':
                 new_resolution = '240p'
             
-        elif (latency < self.thresholds['latency_low'] and 
-              jitter < self.thresholds['jitter_high'] / 2 and 
-              packet_loss < self.thresholds['packet_loss_high'] / 2 and
-              throughput > self.thresholds['throughput_high']):
-            
+        elif good_network_conditions:
             # Network conditions are good, increase resolution
             if self.current_resolution == '240p':
                 new_resolution = '360p'
@@ -180,15 +214,29 @@ class ChunkResolutionEngine:
                 new_resolution = '1080p'
         
         if new_resolution != self.current_resolution:
-            print(f"🎯 Chunk resolution adaptation: {self.current_resolution} → {new_resolution}")
-            print(f"📊 Metrics: Latency={latency:.1f}ms, Jitter={jitter:.1f}ms, "
-                  f"Loss={packet_loss:.1f}%, Throughput={throughput:.0f}B/s")
+            old_thresholds = current_thresholds
+            new_thresholds = self.resolution_throughput_thresholds.get(new_resolution, {})
+            
+            print(f"🎯 Adaptive resolution change: {self.current_resolution} → {new_resolution}")
+            print(f"📊 Current Metrics: Latency={latency:.1f}ms, Jitter={jitter:.1f}ms, "
+                  f"Loss={packet_loss:.1f}%, Throughput={throughput/1000:.1f}KB/s")
+            print(f"🔧 Old thresholds: Low={old_thresholds['throughput_low']/1000:.0f}KB/s, "
+                  f"High={old_thresholds['throughput_high']/1000:.0f}KB/s")
+            print(f"🔧 New thresholds: Low={new_thresholds.get('throughput_low', 0)/1000:.0f}KB/s, "
+                  f"High={new_thresholds.get('throughput_high', 0)/1000:.0f}KB/s")
             
             self.current_resolution = new_resolution
             self.last_adaptation_time = current_time
             self.resolution_history.append((current_time, new_resolution))
         
         return self.current_resolution
+    
+    def get_current_thresholds(self):
+        """Get the current adaptive thresholds for the active resolution"""
+        return self.resolution_throughput_thresholds.get(
+            self.current_resolution, 
+            self.resolution_throughput_thresholds['480p']  # fallback
+        )
 
 class ChunkBasedClient:
     def __init__(self, server_host='127.0.0.1', video_port=8890, control_port=8889):
@@ -382,6 +430,7 @@ class ChunkBasedClient:
                     print("📦 Commands: chunk X, status, help, quit")
                 elif command == 'status':
                     metrics = self.network_monitor.get_metrics()
+                    current_thresholds = self.adaptation_engine.get_current_thresholds()
                     print(f"📊 Current Status:")
                     print(f"   Resolution: {self.current_resolution}")
                     print(f"   Current Chunk: {self.current_chunk}/{self.total_chunks}")
@@ -390,6 +439,9 @@ class ChunkBasedClient:
                     print(f"   Loss: {metrics['packet_loss']:.1f}%")
                     print(f"   Throughput: {metrics['throughput']/1000:.1f} KB/s")
                     print(f"   Chunk Switches: {metrics['chunk_switches']}")
+                    print(f"🎯 Adaptive Thresholds for {self.current_resolution}:")
+                    print(f"   Min Throughput: {current_thresholds['throughput_low']/1000:.0f} KB/s")
+                    print(f"   Upgrade Threshold: {current_thresholds['throughput_high']/1000:.0f} KB/s")
                 elif command.startswith('chunk '):
                     try:
                         chunk_num = int(command.split()[1])
@@ -534,6 +586,7 @@ class ChunkBasedClient:
     def add_chunk_overlay(self, frame, resolution, chunk_id, frame_index):
         """Add chunk information overlay to video frame"""
         metrics = self.network_monitor.get_metrics()
+        current_thresholds = self.adaptation_engine.get_current_thresholds()
         
         # Resolution dimensions
         resolution_map = {
@@ -563,7 +616,7 @@ class ChunkBasedClient:
         y_offset += 30
         
         # Mode indicator
-        cv2.putText(frame, "Mode: CHUNK-BASED (Fragmented)", 
+        cv2.putText(frame, "Mode: CHUNK-BASED (Adaptive)", 
                    (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2)
         y_offset += 30
         
@@ -585,8 +638,26 @@ class ChunkBasedClient:
                    (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
         y_offset += 20
         
-        cv2.putText(frame, f"Throughput: {metrics['throughput']/1000:.1f} KB/s", 
-                   (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        # Throughput with adaptive thresholds
+        throughput_kb = metrics['throughput']/1000
+        min_threshold_kb = current_thresholds['throughput_low']/1000
+        upgrade_threshold_kb = current_thresholds['throughput_high']/1000
+        
+        # Color code throughput based on thresholds
+        if throughput_kb < min_threshold_kb:
+            throughput_color = (0, 0, 255)  # Red - below minimum
+        elif throughput_kb > upgrade_threshold_kb:
+            throughput_color = (0, 255, 0)  # Green - above upgrade threshold
+        else:
+            throughput_color = (0, 255, 255)  # Yellow - in acceptable range
+        
+        cv2.putText(frame, f"Throughput: {throughput_kb:.1f} KB/s", 
+                   (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.5, throughput_color, 1)
+        y_offset += 20
+        
+        # Show adaptive thresholds
+        cv2.putText(frame, f"Thresholds: Min={min_threshold_kb:.0f} | Up={upgrade_threshold_kb:.0f} KB/s", 
+                   (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (200, 200, 200), 1)
     
     def cleanup(self):
         """Clean up resources"""
