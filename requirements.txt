@@ -1,0 +1,9 @@
+# Core dependencies for video streaming application
+opencv-python>=4.8.0
+numpy>=1.21.0
+matplotlib>=3.5.0
+psutil>=5.8.0
+
+# Alternative packages for specific issues
+# If opencv-python fails, try opencv-python-headless
+# opencv-python-headless>=4.8.0

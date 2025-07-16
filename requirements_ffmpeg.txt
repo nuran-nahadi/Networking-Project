@@ -1,0 +1,40 @@
+# Requirements for FFmpeg-based video streaming (Windows)
+# Core Python packages (no OpenCV needed for FFmpeg version)
+
+# No additional Python packages required!
+# The FFmpeg version only needs the Python standard library
+
+# FFmpeg Installation for Windows:
+# ================================
+#
+# Method 1: Using winget (Windows Package Manager) - RECOMMENDED
+#   winget install Gyan.FFmpeg
+#   # or
+#   winget install FFmpeg
+#
+# Method 2: Using Chocolatey (if you have it installed)
+#   choco install ffmpeg
+#
+# Method 3: Manual Installation
+#   1. Go to https://www.gyan.dev/ffmpeg/builds/
+#   2. Download "release builds" -> "ffmpeg-release-essentials.zip"
+#   3. Extract to C:\ffmpeg (or any folder)
+#   4. Add C:\ffmpeg\bin to your Windows PATH:
+#      - Press Win + R, type "sysdm.cpl", press Enter
+#      - Click "Environment Variables" button
+#      - Under "System Variables", find and select "Path", click "Edit"
+#      - Click "New" and add: C:\ffmpeg\bin
+#      - Click OK on all dialogs
+#      - Restart Command Prompt/PowerShell
+#
+# Method 4: Using Scoop (if you have it installed)
+#   scoop install ffmpeg
+#
+# To verify installation (open new Command Prompt/PowerShell):
+#   ffmpeg -version
+#   ffplay -version
+#
+# Troubleshooting:
+# - If commands not found, restart your terminal/IDE
+# - Make sure FFmpeg bin folder is in PATH
+# - For VS Code, restart the application after PATH changes
