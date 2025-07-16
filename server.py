@@ -10,7 +10,7 @@ from typing import Dict, List, Tuple
 import numpy as np
 
 class VideoStreamingServer:
-    def __init__(self, host='10.42.0.13', video_port=8888, control_port=8889, video_file_path=None):
+    def __init__(self, host='10.177.60.65', video_port=8888, control_port=8889, video_file_path=None):
         self.host = host
         self.video_port = video_port
         self.control_port = control_port
@@ -26,8 +26,8 @@ class VideoStreamingServer:
             '4K': (3840, 2160, 15000000)
         }
         
-        self.current_resolution = '1080p' 
-        self.client_address = None  # Single client address
+        self.current_resolution = '720p' 
+        self.clients = {}  # Store client connections and their preferred resolution
         self.video_source = None
         self.is_streaming = False
         self.original_fps = 30  # Default FPS
@@ -46,7 +46,7 @@ class VideoStreamingServer:
             self.control_socket.bind((self.host, self.control_port))
             self.control_socket.listen(5)
             print(f"Control server listening on {self.host}:{self.control_port}")
-            
+            self.is_streaming = True
             # Start control message handler in separate thread
             control_thread = threading.Thread(target=self.handle_control_connections)
             control_thread.daemon = True
@@ -76,7 +76,7 @@ class VideoStreamingServer:
                 print("Error: No video file specified.")
                 return
             
-            self.is_streaming = True
+            
             self.start_video_streaming()
             
         except Exception as e:
@@ -101,12 +101,8 @@ class VideoStreamingServer:
                 print(f"Error in control connection: {e}")
     
     def handle_client_control(self, client_socket, addr):
-        """Handle control messages from the single client"""
+        """Handle control messages from a specific client"""
         try:
-            # Register this as the active client
-            self.client_address = ('10.42.0.176', 8890)
-            print(f"Registered single client: {self.client_address}")
-            
             while self.is_streaming:
                 data = client_socket.recv(1024).decode()
                 if not data:
@@ -117,12 +113,8 @@ class VideoStreamingServer:
                     if message['type'] == 'resolution_request':
                         requested_resolution = message['resolution']
                         if requested_resolution in self.resolutions:
-                            # Log resolution change before updating
-                            if requested_resolution != self.current_resolution:
-                                print(f"[OUTPUT] Stream resolution changed: {self.current_resolution} -> {requested_resolution}")
-                            
-                            self.current_resolution = requested_resolution
-                            print(f"[RESOLUTION] Client requested resolution change to: {requested_resolution}")
+                            self.clients[addr] = requested_resolution
+                            print(f"Client {addr} requested resolution: {requested_resolution}")
                             
                             # Send acknowledgment
                             response = {
@@ -139,8 +131,8 @@ class VideoStreamingServer:
             print(f"Error handling client {addr}: {e}")
         finally:
             client_socket.close()
-            self.client_address = None
-            print("Client disconnected")
+            if addr in self.clients:
+                del self.clients[addr]
     
     def get_video_frame(self):
         """Capture video frame from file"""
@@ -184,15 +176,13 @@ class VideoStreamingServer:
         return header + frame_data
     
     def start_video_streaming(self):
-        """Main video streaming loop for single client"""
+        """Main video streaming loop"""
         sequence_number = 0
         # Use original video FPS, but cap at 30 FPS for network efficiency
         fps = min(self.original_fps, 30) if self.original_fps > 0 else 15
         frame_delay = 1.0 / fps
         
         print(f"Starting video stream at {fps:.2f} FPS...")
-        print(f"Waiting for client to connect on {self.host}:{self.control_port}")
-        print(f"[OUTPUT] Initial stream resolution: {self.current_resolution}")
         if self.video_file_path:
             print(f"Streaming video file: {os.path.basename(self.video_file_path)}")
         
@@ -205,11 +195,10 @@ class VideoStreamingServer:
                 if frame is None:
                     continue
                 
-                # Only stream if client is connected
-                if self.client_address:
-                    # Use current resolution (updated by client requests)
-                    resolution = self.current_resolution
-                    
+                # Determine which resolutions to send (default to 480p if no clients)
+                active_resolutions = set(self.clients.values()) if self.clients else {'720p'}
+                
+                for resolution in active_resolutions:
                     # Resize and encode frame
                     resized_frame = self.resize_frame(frame, resolution)
                     
@@ -227,8 +216,8 @@ class VideoStreamingServer:
                     # Create packet
                     packet = self.create_packet(encoded_frame, sequence_number, resolution)
                     
-                    # Send to the single client
-                    self.send_packet_to_client(packet)
+                    # Send to all clients requesting this resolution
+                    self.broadcast_packet(packet, resolution)
                 
                 sequence_number += 1
                 
@@ -245,14 +234,14 @@ class VideoStreamingServer:
         
         self.cleanup()
     
-    def send_packet_to_client(self, packet):
-        """Send packet to the single connected client"""
-        if self.client_address:
-            try:
-                self.video_socket.sendto(packet, self.client_address)
-            except Exception as e:
-                print(f"Error sending packet to client {self.client_address}: {e}")
-                # Don't disconnect client on single packet failure
+    def broadcast_packet(self, packet, resolution):
+        """Send packet to clients requesting specific resolution"""
+        # Send to the specific client at 10.177.60.18
+        try:
+            client_address = ('10.177.60.18', 8890)  # Client listening port
+            self.video_socket.sendto(packet, client_address)
+        except Exception as e:
+            pass  # Client might not be ready yet
     
     def cleanup(self):
         """Clean up resources"""
