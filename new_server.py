@@ -8,10 +8,10 @@ import os
 import shutil
 from typing import Dict, List, Tuple
 import numpy as np
-from config import INITIAL_RESOLUTION
+from config import INITIAL_RESOLUTION, SERVER_IP
 
 class ChunkBasedVideoServer:
-    def __init__(self, host='127.0.0.1', video_port=8888, control_port=8889, video_file_path=None):
+    def __init__(self, host=SERVER_IP, video_port=8888, control_port=8889, video_file_path=None):
         self.host = host
         self.video_port = video_port
         self.control_port = control_port
@@ -186,7 +186,7 @@ class ChunkBasedVideoServer:
             control_thread.start()
             
             # Start chunk streaming
-            self.start_chunk_streaming()
+            self.stream_chunks()
             
         except Exception as e:
             print(f"Error starting server: {e}")
@@ -199,19 +199,16 @@ class ChunkBasedVideoServer:
                 print(f"🔗 Control connection from {addr}")
                 
                 # Handle client in separate thread
-                client_thread = threading.Thread(
-                    target=self.handle_client_control,
-                    args=(client_socket, addr)
-                )
+                client_thread = threading.Thread(target=self.handle_client_control, args=(client_socket, addr))
                 client_thread.daemon = True
                 client_thread.start()
                 
             except Exception as e:
                 if self.is_streaming:
-                    print(f"Error in control connection: {e}")
+                    print(f"Error accepting control connection: {e}")
     
     def handle_client_control(self, client_socket, addr):
-        """Handle control messages from a client"""
+        """Handle control messages from a specific client"""
         try:
             # Register client with default settings
             self.clients[addr] = {
@@ -223,65 +220,65 @@ class ChunkBasedVideoServer:
             print(f"📱 Client {addr} registered with default resolution: {INITIAL_RESOLUTION}")
             
             # Send registration acknowledgment
-            response = {
+            ack = {
                 'type': 'registration_ack',
                 'status': 'success',
                 'total_chunks': self.total_chunks,
                 'chunk_duration': self.chunk_duration
             }
-            client_socket.send(json.dumps(response).encode())
+            client_socket.send(json.dumps(ack).encode())
             
-            while self.is_streaming:
-                data = client_socket.recv(1024).decode()
-                if not data:
-                    break
-                
+            # Handle control messages
+            while self.is_streaming and addr in self.clients:
                 try:
-                    message = json.loads(data)
+                    data = client_socket.recv(1024)
+                    if not data:
+                        break
+                        
+                    message = json.loads(data.decode())
                     
                     if message['type'] == 'resolution_request':
-                        requested_resolution = message['resolution']
-                        if requested_resolution in self.resolutions:
-                            old_resolution = self.clients[addr]['resolution']
-                            self.clients[addr]['resolution'] = requested_resolution
-                            print(f"🎯 Client {addr} resolution: {old_resolution} → {requested_resolution}")
+                        new_resolution = message['resolution']
+                        if new_resolution in self.resolutions:
+                            self.clients[addr]['resolution'] = new_resolution
+                            print(f"🎯 Client {addr} changed resolution to {new_resolution}")
                             
                             # Send acknowledgment
-                            response = {
+                            ack = {
                                 'type': 'resolution_ack',
-                                'resolution': requested_resolution,
-                                'timestamp': time.time()
+                                'resolution': new_resolution,
+                                'status': 'success'
                             }
-                            client_socket.send(json.dumps(response).encode())
+                            client_socket.send(json.dumps(ack).encode())
                     
                     elif message['type'] == 'chunk_request':
-                        # Client requesting specific chunk
-                        chunk_id = message.get('chunk_id', 0)
+                        chunk_id = message['chunk_id']
                         if 0 <= chunk_id < self.total_chunks:
                             self.clients[addr]['current_chunk'] = chunk_id
-                            print(f"📦 Client {addr} requesting chunk {chunk_id}")
-                        
-                except json.JSONDecodeError:
-                    print(f"❌ Invalid JSON from {addr}")
-                    
+                            print(f"📦 Client {addr} requested chunk {chunk_id}")
+                            
+                except Exception as e:
+                    print(f"Error handling control message from {addr}: {e}")
+                    break
+        
         except Exception as e:
-            print(f"Error handling client {addr}: {e}")
+            print(f"Error in client control handler for {addr}: {e}")
         finally:
-            client_socket.close()
             if addr in self.clients:
                 del self.clients[addr]
-                print(f"👋 Client {addr} disconnected")
+            client_socket.close()
+            print(f"🔌 Client {addr} disconnected")
     
-    def create_chunk_packets(self, frame_data, sequence_number, chunk_id, frame_index, resolution):
+    def create_chunk_packets(self, chunk_id, frame_index, resolution, frame_data, sequence_number):
         """Create packets for chunk-based streaming with fragmentation support"""
-        timestamp = time.time()
+        max_packet_size = 60000  # Safe UDP packet size for Windows
         resolution_bytes = resolution.encode()
         
-        # Calculate maximum payload size (leaving room for headers)
-        max_packet_size = 60000  # Safe UDP packet size for Windows
+        # Calculate header size
         base_header_size = 4 + 8 + 4 + 4 + 1 + len(resolution_bytes) + 4 + 4 + 4  # Added fragment info
         max_payload_size = max_packet_size - base_header_size
         
+        # Create packets with fragmentation
         packets = []
         total_fragments = (len(frame_data) + max_payload_size - 1) // max_payload_size
         
@@ -294,127 +291,101 @@ class ChunkBasedVideoServer:
             # sequence(4) + timestamp(8) + chunk_id(4) + frame_index(4) + resolution_len(1) + resolution + 
             # total_fragments(4) + fragment_index(4) + fragment_size(4) + fragment_data
             header = struct.pack('!I', sequence_number + fragment_index)  # unique sequence per fragment
-            header += struct.pack('!d', timestamp)                       # timestamp
-            header += struct.pack('!I', chunk_id)                        # chunk ID
-            header += struct.pack('!I', frame_index)                     # frame index within chunk
-            header += struct.pack('!B', len(resolution_bytes))           # resolution length
-            header += resolution_bytes                                    # resolution string
-            header += struct.pack('!I', total_fragments)                 # total fragments for this frame
-            header += struct.pack('!I', fragment_index)                  # current fragment index
-            header += struct.pack('!I', len(fragment_data))              # fragment data length
+            header += struct.pack('!d', time.time())                     # timestamp
+            header += struct.pack('!I', chunk_id)                       # chunk ID
+            header += struct.pack('!I', frame_index)                    # frame index within chunk
+            header += struct.pack('!B', len(resolution_bytes))          # resolution string length
+            header += resolution_bytes                                   # resolution string
+            header += struct.pack('!I', total_fragments)                # total fragments for this frame
+            header += struct.pack('!I', fragment_index)                 # current fragment index
+            header += struct.pack('!I', len(fragment_data))             # fragment size
             
-            packets.append(header + fragment_data)
+            packet = header + fragment_data
+            packets.append(packet)
         
         return packets
     
-    def start_chunk_streaming(self):
-        """Main chunk streaming loop"""
+    def stream_chunks(self):
+        """Stream chunks to connected clients with improved chunk handling"""
+        print("📡 Starting chunk streaming...")
         sequence_number = 0
-        frame_delay = 1.0 / self.original_fps
-        
-        print(f"🎬 Starting chunk-based streaming at {self.original_fps:.2f} FPS")
-        print(f"📊 Total chunks: {self.total_chunks}, Duration per chunk: {self.chunk_duration}s (2-second chunks)")
-        print(f"⚡ Faster chunk switching for responsive streaming")
+        frame_rate = 30  # Target FPS
+        frame_duration = 1.0 / frame_rate
         
         while self.is_streaming:
+            start_time = time.time()
+            
             try:
-                # Process each client
+                # Send frames to all connected clients
                 for addr, client_info in list(self.clients.items()):
                     resolution = client_info['resolution']
                     chunk_id = client_info['current_chunk']
                     
-                    # Load chunk if needed
-                    chunk_frames = self.load_chunk(resolution, chunk_id)
-                    if chunk_frames is None:
-                        # Move to next chunk or loop back to beginning
-                        if chunk_id >= self.total_chunks - 1:
-                            client_info['current_chunk'] = 0
-                        else:
-                            client_info['current_chunk'] += 1
-                        continue
-                    
-                    # Send frames from current chunk
-                    for frame_index, frame_data in enumerate(chunk_frames):
-                        start_time = time.time()
-                        
-                        # Create fragmented packets for large frames
-                        packets = self.create_chunk_packets(
-                            frame_data, sequence_number, chunk_id, frame_index, resolution
-                        )
-                        
-                        # Send all fragments for this frame
-                        for packet in packets:
-                            try:
-                                client_address = (addr[0], 8890)  # Assuming client video port
-                                self.video_socket.sendto(packet, client_address)
-                            except Exception as e:
-                                print(f"Error sending fragment to {addr}: {e}")
+                    # Load chunk frames
+                    frames = self.load_chunk(resolution, chunk_id)
+                    if frames:
+                        for frame_index, frame_data in enumerate(frames):
+                            if not self.is_streaming:
                                 break
+                            
+                            # Create packets for this frame
+                            packets = self.create_chunk_packets(
+                                chunk_id, frame_index, resolution, frame_data, sequence_number
+                            )
+                            
+                            # Send all packets for this frame
+                            for packet in packets:
+                                try:
+                                    self.video_socket.sendto(packet, (addr[0], self.video_port))
+                                except Exception as e:
+                                    print(f"Error sending packet to {addr}: {e}")
+                            
+                            sequence_number += len(packets)
+                            
+                            # Frame timing
+                            time.sleep(frame_duration)
                         
-                        sequence_number += len(packets)  # Increment by number of fragments sent
-                        
-                        # Maintain frame rate
-                        elapsed = time.time() - start_time
-                        if elapsed < frame_delay:
-                            time.sleep(frame_delay - elapsed)
-                    
-                    # Move to next chunk
-                    if chunk_id >= self.total_chunks - 1:
-                        client_info['current_chunk'] = 0  # Loop back to beginning
-                        print(f"🔄 Client {addr} looping back to chunk 0")
-                    else:
-                        client_info['current_chunk'] += 1
+                        # Auto-advance to next chunk
+                        if chunk_id + 1 < self.total_chunks:
+                            self.clients[addr]['current_chunk'] = chunk_id + 1
+                        else:
+                            # Loop back to beginning
+                            self.clients[addr]['current_chunk'] = 0
                 
-                # If no clients, just wait
-                if not self.clients:
-                    time.sleep(0.1)
-                    
-            except KeyboardInterrupt:
-                print("\n🛑 Stopping server...")
-                break
+                # Maintain loop timing
+                elapsed = time.time() - start_time
+                if elapsed < 0.1:  # Minimum loop delay
+                    time.sleep(0.1 - elapsed)
+                
             except Exception as e:
-                print(f"Error in streaming loop: {e}")
-        
-        self.cleanup()
+                print(f"Error in chunk streaming: {e}")
+                time.sleep(0.1)
     
     def cleanup(self):
-        """Clean up resources"""
+        """Clean up server resources"""
         self.is_streaming = False
         
-        # Close sockets
-        try:
+        if self.video_socket:
             self.video_socket.close()
+        
+        if self.control_socket:
             self.control_socket.close()
-        except:
-            pass
         
-        # Close client connections
-        for client_info in self.clients.values():
-            try:
-                client_info['socket'].close()
-            except:
-                pass
-        
-        print("🧹 Server cleanup completed")
+        print("🧹 Chunk server cleanup completed")
 
 def main():
-    import sys
-    
     # Get video file path
-    video_file = None
-    if len(sys.argv) > 1:
-        video_file = sys.argv[1]
-        if not os.path.exists(video_file):
-            print(f"❌ Error: Video file '{video_file}' not found!")
-            print("Usage: python server_chunk.py [path_to_video.mp4]")
-            return
-    else:
-        print("🎥 Chunk-based Video Streaming Server")
-        print("=" * 40)
-        video_file = input("Enter path to video file: ").strip().strip('"')
-        if not video_file or not os.path.exists(video_file):
-            print(f"❌ Error: Video file '{video_file}' not found!")
-            return
+    video_file = input("📁 Enter video file path: ").strip()
+    if not video_file:
+        print("❌ No video file provided")
+        return
+    
+    if not os.path.exists(video_file):
+        print(f"❌ Video file not found: {video_file}")
+        return
+    
+    print(f"🌐 Starting chunk-based server on IP: {SERVER_IP}")
+    print("📱 Clients should connect from configured CLIENT_IP")
     
     server = ChunkBasedVideoServer(video_file_path=video_file)
     try:
