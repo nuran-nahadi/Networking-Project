@@ -1,9 +1,52 @@
-# Core dependencies for video streaming application
-opencv-python>=4.8.0
-numpy>=1.21.0
-matplotlib>=3.5.0
-psutil>=5.8.0
+# Python Requirements for Video Streaming Server-Client Setup
+# Video Streaming Project - Complete Requirements List
 
-# Alternative packages for specific issues
-# If opencv-python fails, try opencv-python-headless
+# ===== CORE REQUIRED PACKAGES =====
+
+# Computer Vision and Video Processing
+opencv-python>=4.8.0
+# Alternative if opencv-python fails on headless systems:
 # opencv-python-headless>=4.8.0
+
+# Numerical Computing and Array Operations
+numpy>=1.24.0
+
+# ===== BUILT-IN PYTHON MODULES (No installation needed) =====
+# socket - Network communication
+# threading - Multi-threading support
+# time - Time utilities
+# json - JSON encoding/decoding
+# struct - Binary data packing/unpacking
+# subprocess - Process management (for FFmpeg)
+# os - Operating system interface
+# sys - System parameters and functions
+# signal - Signal handling
+# pathlib - Object-oriented filesystem paths
+# collections - Specialized container datatypes (deque)
+# statistics - Mathematical statistics functions
+# typing - Type hints support
+
+# ===== OPTIONAL ENHANCEMENTS =====
+
+# System Monitoring (Optional - for advanced metrics)
+psutil>=5.9.0
+
+# Plotting and Visualization (Optional - for network metrics graphs)
+matplotlib>=3.7.0
+
+# Enhanced Image Processing (Optional)
+pillow>=10.0.0
+
+# ===== EXTERNAL DEPENDENCIES (Not Python packages) =====
+# FFmpeg - Required for FFmpeg-based streaming (server_ffmpeg.py, client_ffmpeg.py)
+# Install separately:
+# Windows: Download from https://ffmpeg.org/download.html
+# macOS: brew install ffmpeg
+# Ubuntu/Debian: sudo apt update && sudo apt install ffmpeg
+# CentOS/RHEL: sudo yum install ffmpeg
+
+# ===== DEVELOPMENT TOOLS (Optional) =====
+# pytest>=7.4.0          # Unit testing framework
+# black>=23.0.0           # Code formatter
+# flake8>=6.0.0           # Code linter
+# mypy>=1.5.0             # Static type checker

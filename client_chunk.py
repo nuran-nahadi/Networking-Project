@@ -7,6 +7,7 @@ import struct
 import numpy as np
 from collections import deque
 import statistics
+from config import INITIAL_RESOLUTION
 
 class ChunkNetworkMonitor:
     def __init__(self, window_size=100, throughput_window_seconds=1.0):
@@ -117,7 +118,7 @@ class ChunkNetworkMonitor:
 
 class ChunkResolutionEngine:
     def __init__(self):
-        self.current_resolution = '480p'
+        self.current_resolution = INITIAL_RESOLUTION
         self.resolution_history = deque(maxlen=50)
         
         # Base thresholds for chunk-based streaming
@@ -254,7 +255,7 @@ class ChunkBasedClient:
         
         # State
         self.is_running = False
-        self.current_resolution = '480p'
+        self.current_resolution = INITIAL_RESOLUTION
         self.current_chunk = 0
         self.total_chunks = 0
         self.chunk_duration = 2.0  # Updated to match server's 2-second chunks

@@ -49,6 +49,9 @@ Thumbs.db
 *.webm
 *.m4v
 
+# Video chunks storage
+video_chunks/
+
 # Logs
 *.log
 

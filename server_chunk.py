@@ -8,6 +8,7 @@ import os
 import shutil
 from typing import Dict, List, Tuple
 import numpy as np
+from config import INITIAL_RESOLUTION
 
 class ChunkBasedVideoServer:
     def __init__(self, host='127.0.0.1', video_port=8888, control_port=8889, video_file_path=None):
@@ -214,12 +215,12 @@ class ChunkBasedVideoServer:
         try:
             # Register client with default settings
             self.clients[addr] = {
-                'resolution': '480p',
+                'resolution': INITIAL_RESOLUTION,
                 'current_chunk': 0,
                 'socket': client_socket
             }
             
-            print(f"📱 Client {addr} registered with default resolution: 480p")
+            print(f"📱 Client {addr} registered with default resolution: {INITIAL_RESOLUTION}")
             
             # Send registration acknowledgment
             response = {
